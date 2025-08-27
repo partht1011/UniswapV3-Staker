@@ -5,6 +5,7 @@ import { useTokenBalance } from '@/hooks/useTokenBalance';
 import { CONTRACTS, POOL_CONFIG } from '@/config/constants';
 import { TransactionStatus } from '@/types';
 import toast from 'react-hot-toast';
+import { usePoolData } from '@/hooks/usePoolData';
 
 interface LiquidityProviderProps {
   onLiquidityAdded?: (tokenId: string) => void;
@@ -48,6 +49,7 @@ export function LiquidityProvider({ onLiquidityAdded }: LiquidityProviderProps) 
   const [jocxAmount, setJocxAmount] = useState('');
   const [usdtAmount, setUsdtAmount] = useState('');
   const [status, setStatus] = useState<TransactionStatus>(TransactionStatus.IDLE);
+  const poolData = usePoolData();
 
   const { balance: jocxBalance, refetch: refetchJocx } = useTokenBalance(CONTRACTS.JOCX_TOKEN);
   const { balance: usdtBalance, refetch: refetchUsdt } = useTokenBalance(CONTRACTS.USDT_TOKEN);
@@ -93,8 +95,8 @@ export function LiquidityProvider({ onLiquidityAdded }: LiquidityProviderProps) 
             tickUpper,
             amount0Desired,
             amount1Desired,
-            amount0Min: (amount0Desired * 95n) / 100n, // 5% slippage
-            amount1Min: (amount1Desired * 95n) / 100n, // 5% slippage
+            amount0Min: (amount0Desired * BigInt(95)) / BigInt(100), // 5% slippage
+            amount1Min: (amount1Desired * BigInt(95)) / BigInt(100), // 5% slippage
             recipient: address,
             deadline: BigInt(deadline),
           },
@@ -170,7 +172,7 @@ export function LiquidityProvider({ onLiquidityAdded }: LiquidityProviderProps) 
               Balance: {parseFloat(jocxBalance).toFixed(4)} JOCX
             </span>
             <span className="text-slate-500">
-              ~${(parseFloat(jocxAmount || '0') * 0.5).toFixed(2)} USD
+              ~${(parseFloat(jocxAmount || '0') * (poolData ? poolData.jocxPrice : 0)).toFixed(2)} USD
             </span>
           </div>
         </div>
@@ -213,36 +215,6 @@ export function LiquidityProvider({ onLiquidityAdded }: LiquidityProviderProps) 
             <span className="text-slate-500">
               ~${parseFloat(usdtAmount || '0').toFixed(2)} USD
             </span>
-          </div>
-        </div>
-
-        {/* Pool Information */}
-        <div className="card-compact bg-gradient-to-br from-blue-50/80 to-indigo-50/80 border-blue-200/50">
-          <div className="flex items-center mb-3">
-            <div className="w-6 h-6 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center mr-2">
-              <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-            <h4 className="font-semibold text-blue-900">Pool Information</h4>
-          </div>
-          <div className="grid grid-cols-2 gap-3 text-sm">
-            <div className="flex justify-between">
-              <span className="text-blue-700">Fee Tier:</span>
-              <span className="font-semibold text-blue-900">0.3%</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-blue-700">Current Price:</span>
-              <span className="font-semibold text-blue-900">$0.50</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-blue-700">24h Volume:</span>
-              <span className="font-semibold text-blue-900">$125K</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-blue-700">TVL:</span>
-              <span className="font-semibold text-blue-900">$2.5M</span>
-            </div>
           </div>
         </div>
 

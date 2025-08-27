@@ -75,7 +75,7 @@
 
   .glow-effect::before {
     content: '';
-    @apply absolute -inset-1 bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl blur opacity-20 group-hover:opacity-30 transition-opacity duration-300;
+    @apply absolute -inset-1 bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl opacity-20 group-hover:opacity-30 transition-opacity duration-300;
     z-index: -1;
   }
 

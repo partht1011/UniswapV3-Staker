@@ -2,21 +2,12 @@ import { usePoolData } from '@/hooks/usePoolData';
 import { useStakingStats } from '@/hooks/useStakingStats';
 import { usePriceData } from '@/hooks/usePriceData';
 import { LoadingSkeleton } from './LoadingSkeleton';
+import { formatCurrency } from '@/utils/common';
 
 export function DataDashboard() {
   const poolData = usePoolData();
   const stakingStats = useStakingStats();
   const priceData = usePriceData();
-
-  const formatCurrency = (value: number) => {
-    if (value >= 1000000) {
-      return `$${(value / 1000000).toFixed(1)}M`;
-    } else if (value >= 1000) {
-      return `$${(value / 1000).toFixed(1)}K`;
-    } else {
-      return `$${value.toFixed(0)}`;
-    }
-  };
 
   const formatNumber = (value: number) => {
     return value.toLocaleString();
@@ -50,25 +41,17 @@ export function DataDashboard() {
               )}
             </span>
           </div>
-
           <div className="flex justify-between items-center py-2 border-b border-slate-100">
-            <span className="text-slate-600">Total Liquidity:</span>
+            <span className="text-slate-600">JOCX Balance:</span>
             <span className="text-slate-900 font-semibold">
-              {poolData.isLoading ? <LoadingSkeleton className="w-16 h-4" /> : poolData.liquidity}
-            </span>
-          </div>
-
-          <div className="flex justify-between items-center py-2 border-b border-slate-100">
-            <span className="text-slate-600">24h Volume:</span>
-            <span className="text-slate-900 font-semibold">
-              {priceData.isLoading ? <LoadingSkeleton className="w-16 h-4" /> : formatCurrency(priceData.volume24h)}
+              {priceData.isLoading ? <LoadingSkeleton className="w-16 h-4" /> : formatCurrency(poolData.jocxBalance, '')}
             </span>
           </div>
 
           <div className="flex justify-between items-center py-2">
-            <span className="text-slate-600">Market Cap:</span>
+            <span className="text-slate-600">USDT Balance:</span>
             <span className="text-slate-900 font-semibold">
-              {priceData.isLoading ? <LoadingSkeleton className="w-16 h-4" /> : formatCurrency(priceData.marketCap)}
+              {priceData.isLoading ? <LoadingSkeleton className="w-16 h-4" /> : formatCurrency(poolData.usdtBalance)}
             </span>
           </div>
         </div>
@@ -76,13 +59,6 @@ export function DataDashboard() {
         {/* Staking Information */}
         <div className="space-y-4">
           <h4 className="text-lg font-semibold text-slate-800 mb-3">Staking Information</h4>
-          
-          <div className="flex justify-between items-center py-2 border-b border-slate-100">
-            <span className="text-slate-600">Total Positions:</span>
-            <span className="text-slate-900 font-semibold">
-              {stakingStats.isLoading ? <LoadingSkeleton className="w-16 h-4" /> : formatNumber(stakingStats.totalPositions)}
-            </span>
-          </div>
 
           <div className="flex justify-between items-center py-2 border-b border-slate-100">
             <span className="text-slate-600">Staked Value:</span>

@@ -212,7 +212,6 @@ export function StakingInterface({ userPositions = [] }: StakingInterfaceProps) 
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                 </svg>
               </div>
-              <div className="absolute inset-0 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-3xl blur opacity-10"></div>
             </div>
             <h4 className="text-lg font-semibold text-slate-900 mb-2">No Liquidity Positions</h4>
             <p className="text-slate-600 mb-6 max-w-sm mx-auto">

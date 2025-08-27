@@ -2,7 +2,6 @@ import { useState } from 'react';
 import Head from 'next/head';
 import { useAccount } from 'wagmi';
 import { WalletConnection } from '@/components/WalletConnection';
-import { TokenSwap } from '@/components/TokenSwap';
 import { LiquidityProvider } from '@/components/LiquidityProvider';
 import { StakingInterface } from '@/components/StakingInterface';
 import { usePoolData } from '@/hooks/usePoolData';
@@ -13,8 +12,9 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { UI_CONFIG, STAKING_CONFIG } from '@/config/constants';
 
 export default function Home() {
-  const { isConnected } = useAccount();
-  const [activeTab, setActiveTab] = useState<'swap' | 'liquidity' | 'stake'>('swap');
+  // const { isConnected } = useAccount();
+  const isConnected = true;
+  const [activeTab, setActiveTab] = useState<'liquidity' | 'stake'>('liquidity');
   const [userPositions, setUserPositions] = useState<string[]>([]);
   
   // Fetch real data
@@ -28,7 +28,6 @@ export default function Home() {
   };
 
   const tabs = [
-   /* { id: 'swap' as const, label: 'Swap', icon: '🔄' },*/
     { id: 'liquidity' as const, label: 'Add Liquidity', icon: '💧' },
     { id: 'stake' as const, label: 'Stake & Earn', icon: '🎯' },
   ];
@@ -63,7 +62,7 @@ export default function Home() {
         </header>
 
         {/* Main Content with Sidebar Layout */}
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-12">
+        <main className="max-w-8xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-12">
           <div className="flex flex-col xl:flex-row gap-8 min-h-[calc(100vh-200px)]">
             
             {/* Stats Sidebar */}
@@ -104,7 +103,7 @@ export default function Home() {
                     <div className="text-2xl font-bold text-slate-900 mb-1">0.3%</div>
                     <div className="text-sm font-medium text-slate-600">Trading Fee</div>
                     <div className="progress-bar mt-3">
-                      <div className="progress-fill" style={{width: '30%'}}></div>
+                      <div className="progress-fill" style={{width: '3%'}}></div>
                     </div>
                   </div>
                   
@@ -116,15 +115,15 @@ export default function Home() {
                         </svg>
                       </div>
                       <div className="text-xs font-semibold text-orange-600 bg-orange-100 px-2 py-1 rounded-full">
-                        {stakingStats.isLoading ? '+12' : `+${Math.floor(Math.random() * 20) + 5}`}
+                        {poolData.isLoading ? '+12' : `+${Math.floor(Math.random() * 20) + 5}`}
                       </div>
                     </div>
                     <div className="text-2xl font-bold text-slate-900 mb-1">
-                      {stakingStats.isLoading ? '1,247' : stakingStats.activeStakers.toLocaleString()}
+                      {poolData.isLoading ? '1,247' : poolData.activeStakers.toLocaleString()}
                     </div>
                     <div className="text-sm font-medium text-slate-600">Active Stakers</div>
                     <div className="progress-bar mt-3">
-                      <div className="progress-fill" style={{width: stakingStats.isLoading ? '68%' : `${Math.min(stakingStats.stakingRatio * 4, 100)}%`}}></div>
+                      <div className="progress-fill" style={{width: poolData.isLoading ? '68%' : `${Math.min(stakingStats.stakingRatio * 4, 100)}%`}}></div>
                     </div>
                   </div>
                   
@@ -135,19 +134,16 @@ export default function Home() {
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
                         </svg>
                       </div>
-                      <div className={`text-xs font-semibold px-2 py-1 rounded-full ${
-                        priceData.isLoading ? 'text-indigo-600 bg-indigo-100' :
-                        priceData.priceChange24h >= 0 ? 'text-green-600 bg-green-100' : 'text-red-600 bg-red-100'
-                      }`}>
-                        {priceData.isLoading ? 'JOCX' : `${priceData.priceChange24h >= 0 ? '+' : ''}${priceData.priceChange24h.toFixed(1)}%`}
+                      <div className={`text-xs font-semibold px-2 py-1 rounded-full text-indigo-600 bg-indigo-100`}>
+                        JOCX/USDT
                       </div>
                     </div>
                     <div className="text-2xl font-bold text-slate-900 mb-1">
-                      ${priceData.isLoading ? '0.125' : priceData.jocxPrice.toFixed(3)}
+                      ${poolData.isLoading ? '0.08' : poolData.jocxPrice.toFixed(6)}
                     </div>
                     <div className="text-sm font-medium text-slate-600">JOCX Price</div>
                     <div className="progress-bar mt-3">
-                      <div className="progress-fill" style={{width: priceData.isLoading ? '45%' : `${Math.min(priceData.jocxPrice * 400, 100)}%`}}></div>
+                      <div className="progress-fill" style={{width: poolData.isLoading ? '45%' : `${Math.min(poolData.jocxPrice * 400, 100)}%`}}></div>
                     </div>
                   </div>
                 </div>
@@ -169,9 +165,6 @@ export default function Home() {
                   <p className="text-lg text-slate-600 mb-10 max-w-lg mx-auto leading-relaxed">
                     Connect your wallet to start earning rewards by providing liquidity to the JOCX/USDT pool
                   </p>
-                  <div>
-                    <WalletConnection />
-                  </div>
                 </div>
               ) : (
                 <>
@@ -201,9 +194,6 @@ export default function Home() {
                   {/* Tab Content */}
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                     <div>
-                      {activeTab === 'swap' && (
-                        <TokenSwap onSwapComplete={() => setActiveTab('liquidity')} />
-                      )}
                       {activeTab === 'liquidity' && (
                         <LiquidityProvider onLiquidityAdded={handleLiquidityAdded} />
                       )}

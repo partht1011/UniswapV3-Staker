@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useReadContract, useReadContracts } from 'wagmi';
 import { formatUnits } from 'viem';
 import { CONTRACTS } from '@/config/constants';
+import { formatCurrency } from '@/utils/common';
 
 // Uniswap V3 Position Manager ABI
 const POSITION_MANAGER_ABI = [
@@ -83,6 +84,7 @@ export function useStakingStats(): StakingStats {
 
       try {
         setIsLoading(true);
+        console.log(totalSupplyData);
         const totalSupply = Number(totalSupplyData);
         setTotalPositions(totalSupply);
 
@@ -98,8 +100,8 @@ export function useStakingStats(): StakingStats {
         const estimatedStakingRatio = totalSupply > 0 ? (estimatedActiveStakers / totalSupply) * 100 : 0;
 
         setActiveStakers(estimatedActiveStakers);
-        setTotalStakedValue(formatValue(estimatedStakedValue));
-        setAverageStakeSize(formatValue(estimatedAverageStake));
+        setTotalStakedValue(formatCurrency(estimatedStakedValue));
+        setAverageStakeSize(formatCurrency(estimatedAverageStake));
         setStakingRatio(estimatedStakingRatio);
 
         setError(null);
@@ -134,15 +136,4 @@ export function useStakingStats(): StakingStats {
     isLoading,
     error,
   };
-}
-
-// Helper function to format values
-function formatValue(value: number): string {
-  if (value >= 1000000) {
-    return `$${(value / 1000000).toFixed(1)}M`;
-  } else if (value >= 1000) {
-    return `$${(value / 1000).toFixed(1)}K`;
-  } else {
-    return `$${value.toFixed(0)}`;
-  }
 }

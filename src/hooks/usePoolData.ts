@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { useReadContract, useReadContracts } from 'wagmi';
+import { useReadContract, useReadContracts, useAccount } from 'wagmi';
 import { formatUnits } from 'viem';
 import { CONTRACTS, POOL_CONFIG } from '@/config/constants';
+import { formatCurrency } from '@/utils/common';
 
 // Uniswap V3 Pool ABI
 const POOL_ABI = [
@@ -86,9 +87,10 @@ const ERC20_ABI = [
 export interface PoolData {
   poolAddress: string | null;
   tvl: string;
-  jocxPrice: string;
+  jocxPrice: number;
   liquidity: string;
-  volume24h: string;
+  jocxBalance: number;
+  usdtBalance: number;
   activeStakers: number;
   isLoading: boolean;
   error: string | null;
@@ -97,15 +99,16 @@ export interface PoolData {
 export function usePoolData(): PoolData {
   const [poolAddress, setPoolAddress] = useState<string | null>(null);
   const [tvl, setTvl] = useState<string>('0');
-  const [jocxPrice, setJocxPrice] = useState<string>('0');
+  const [jocxPrice, setJocxPrice] = useState<number>(0);
   const [liquidity, setLiquidity] = useState<string>('0');
-  const [volume24h, setVolume24h] = useState<string>('0');
+  const [jocxBalance, setJocxBalance] = useState<number>(0);
+  const [usdtBalance, setUsdtBalance] = useState<number>(0);
   const [activeStakers, setActiveStakers] = useState<number>(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   // Get pool address from factory
-  const { data: poolAddressData } = useReadContract({
+  const { data: poolAddressData} = useReadContract({
     address: CONTRACTS.UNISWAP_V3_FACTORY as `0x${string}`,
     abi: FACTORY_ABI,
     functionName: 'getPool',
@@ -118,7 +121,7 @@ export function usePoolData(): PoolData {
 
   // Update pool address when data is available
   useEffect(() => {
-    console.log("PoolAddressData", poolAddressData);
+
     if (poolAddressData && poolAddressData !== '0x0000000000000000000000000000000000000000') {
       setPoolAddress(poolAddressData);
     }
@@ -172,14 +175,14 @@ export function usePoolData(): PoolData {
         const [slot0Result, liquidityResult, jocxBalanceResult, usdtBalanceResult, jocxDecimalsResult, usdtDecimalsResult] = poolDataResults;
 
         if (
-          slot0Result.status === 'success' &&
-          liquidityResult.status === 'success' &&
-          jocxBalanceResult.status === 'success' &&
-          usdtBalanceResult.status === 'success' &&
-          jocxDecimalsResult.status === 'success' &&
-          usdtDecimalsResult.status === 'success'
+          slot0Result?.status === 'success' &&
+          liquidityResult?.status === 'success' &&
+          jocxBalanceResult?.status === 'success' &&
+          usdtBalanceResult?.status === 'success' &&
+          jocxDecimalsResult?.status === 'success' &&
+          usdtDecimalsResult?.status === 'success'
         ) {
-          const slot0Data = slot0Result.result as any[];
+          const slot0Data = slot0Result.result;
           const sqrtPriceX96 = slot0Data[0];
           const liquidityData = liquidityResult.result;
           const jocxBalance = jocxBalanceResult.result;
@@ -190,16 +193,20 @@ export function usePoolData(): PoolData {
           // Calculate JOCX price from sqrtPriceX96
           // Price = (sqrtPriceX96 / 2^96)^2
           const price = calculatePriceFromSqrtPriceX96(sqrtPriceX96, jocxDecimals, usdtDecimals);
-          setJocxPrice(price.toFixed(6));
+          setJocxPrice(price);
 
           // Calculate TVL
           const jocxBalanceFormatted = parseFloat(formatUnits(jocxBalance, jocxDecimals));
           const usdtBalanceFormatted = parseFloat(formatUnits(usdtBalance, usdtDecimals));
+
+
           const tvlValue = (jocxBalanceFormatted * price) + usdtBalanceFormatted;
-          setTvl(formatTVL(tvlValue));
+          setTvl(formatCurrency(tvlValue));
 
           // Set liquidity
           setLiquidity(formatUnits(liquidityData, 0));
+          setJocxBalance(jocxBalanceFormatted);
+          setUsdtBalance(usdtBalanceFormatted);
 
           setError(null);
         }
@@ -219,9 +226,6 @@ export function usePoolData(): PoolData {
         // For now, we'll estimate based on TVL
         const tvlNum = parseFloat(tvl.replace(/[^0-9.]/g, ''));
         if (tvlNum > 0) {
-          const estimatedVolume = tvlNum * 0.1; // Assume 10% of TVL as daily volume
-          setVolume24h(formatTVL(estimatedVolume));
-          
           // Estimate active stakers (in a real app, you'd query events or subgraph)
           const estimatedStakers = Math.floor(tvlNum / 2000) + Math.floor(Math.random() * 50); // Rough estimate
           setActiveStakers(estimatedStakers);
@@ -241,7 +245,8 @@ export function usePoolData(): PoolData {
     tvl,
     jocxPrice,
     liquidity,
-    volume24h,
+    jocxBalance,
+    usdtBalance,
     activeStakers,
     isLoading,
     error,
@@ -250,19 +255,9 @@ export function usePoolData(): PoolData {
 
 // Helper function to calculate price from sqrtPriceX96
 function calculatePriceFromSqrtPriceX96(sqrtPriceX96: bigint, token0Decimals: number, token1Decimals: number): number {
-  const Q96 = 2n ** 96n;
-  const price = (sqrtPriceX96 * sqrtPriceX96) / (Q96 * Q96);
-  const decimalAdjustment = 10 ** (token1Decimals - token0Decimals);
-  return Number(price) * decimalAdjustment;
+  const decimalAdjustment = 10 ** (token0Decimals - token1Decimals);
+  const sqrtPrice = sqrtPriceX96 * BigInt(decimalAdjustment) / BigInt(2 ** 96);
+  const price = Number(sqrtPrice) ** 2 / decimalAdjustment;
+  return price
 }
 
-// Helper function to format TVL
-function formatTVL(value: number): string {
-  if (value >= 1000000) {
-    return `$${(value / 1000000).toFixed(1)}M`;
-  } else if (value >= 1000) {
-    return `$${(value / 1000).toFixed(1)}K`;
-  } else {
-    return `$${value.toFixed(0)}`;
-  }
-}
