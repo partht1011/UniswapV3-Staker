@@ -85,7 +85,7 @@ export default function Home() {
                     </div>
                     <div className="text-sm font-medium text-slate-600">Total Value Locked</div>
                     <div className="progress-bar mt-3">
-                      <div className="progress-fill" style={{width: poolData.isLoading ? '72%' : `${Math.min((parseFloat(poolData.tvl.replace(/[^0-9.]/g, '')) / 10) * 100, 100)}%`}}></div>
+                      <div className="progress-fill" style={{width: poolData.isLoading ? '50%' : `${Math.min(parseFloat(poolData.tvl.replace(/[^0-9.]/g, '')), 100)}%`}}></div>
                     </div>
                   </div>
                   

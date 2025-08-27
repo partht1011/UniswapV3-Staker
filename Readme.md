@@ -1,70 +1,140 @@
-Client’s Request Explained
+# JOCX Liquidity Staking Platform
 
-Staker Website (Uniswap v3 integration)
+A React + TypeScript + Tailwind CSS application for Uniswap v3 liquidity staking.
 
-The client wants a staking website built using Uniswap v3 Staker contracts (Uniswap has an official periphery contract system for staking liquidity positions).
+## 🚀 Quick Start
 
-This needs to be ready by Monday to match the event timeline.
+### 1. Install Dependencies
 
-👉 Reference: They gave the official Uniswap v3 Staker design docs
-.
+```bash
+npm install
+```
 
-Campaign: 20% APY for Providing Liquidity
+### 2. Environment Setup
 
-The campaign should reward users with 20% annual interest in JOCX tokens.
+Copy `.env.example` to `.env.local` and fill in the required values:
 
-The liquidity pool is JOCX/USDT on Uniswap v3.
+```bash
+cp .env.example .env.local
+```
 
-Basically: if people provide liquidity (LP) to this pool, they earn extra JOCX rewards on top of normal Uniswap trading fees.
+Required environment variables:
+- `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID`: Get from [WalletConnect Cloud](https://cloud.walletconnect.com/)
+- `NEXT_PUBLIC_INFURA_API_KEY`: Get from [Infura](https://infura.io/)
+- `NEXT_PUBLIC_JOCX_TOKEN_ADDRESS`: JOCX token contract address
+- `NEXT_PUBLIC_UNISWAP_V3_STAKER_ADDRESS`: Uniswap v3 Staker contract address
 
-Flexibility in Deposits (Ease of Participation)
+### 3. Update Contract Addresses
 
-Ideally, users shouldn’t need to already hold JOCX or USDT.
+Edit `src/config/constants.ts` and replace the placeholder addresses with actual contract addresses:
 
-They want the UI to support deposits with ETH, USDC, etc., and internally swap into the right tokens before staking.
+```typescript
+export const CONTRACTS = {
+  JOCX_TOKEN: 'YOUR_JOCX_TOKEN_ADDRESS',
+  UNISWAP_V3_STAKER: 'YOUR_STAKER_CONTRACT_ADDRESS',
+  // ... other addresses
+};
+```
 
-This makes onboarding one-click or few-clicks instead of requiring multiple manual swaps.
+### 4. Run Development Server
 
-UI & Hosting
+```bash
+npm run dev
+```
 
-A frontend (web app) is required for this staking system.
+Open [http://localhost:3000](http://localhost:3000) to view the application.
 
-In Summary
+## 🏗️ Project Structure
 
-The client is asking for:
+```
+src/
+├── components/          # React components
+│   ├── WalletConnection.tsx
+│   ├── TokenSwap.tsx
+│   ├── LiquidityProvider.tsx
+│   └── StakingInterface.tsx
+├── config/             # Configuration files
+│   ├── constants.ts    # Contract addresses and settings
+│   └── wagmi.ts       # Wagmi configuration
+├── hooks/              # Custom React hooks
+│   ├── useTokenBalance.ts
+│   └── useStakingRewards.ts
+├── pages/              # Next.js pages
+│   ├── _app.tsx
+│   ├── _document.tsx
+│   └── index.tsx
+├── styles/             # CSS styles
+│   └── globals.css
+└── types/              # TypeScript type definitions
+    └── index.ts
+```
 
-A Uniswap v3 Staker-based liquidity mining system for the JOCX/USDT pool.
+## 🔧 Features
 
-A web interface where users can:
+- **Wallet Connection**: MetaMask, WalletConnect, and other popular wallets
+- **Token Swapping**: Convert ETH/USDC to JOCX/USDT using Uniswap v3
+- **Liquidity Provision**: Add liquidity to JOCX/USDT pool
+- **NFT Staking**: Stake Uniswap v3 LP NFTs for rewards
+- **Rewards Tracking**: Real-time rewards calculation and claiming
+- **Responsive Design**: Mobile-friendly interface with Tailwind CSS
 
-Add liquidity to the pool (even from ETH/USDC).
+## 📋 Prerequisites
 
-Stake their LP tokens via the Uniswap v3 Staker.
+Before deploying, ensure you have:
 
-Earn 20% APY rewards in JOCX.
+1. **JOCX Token Contract**: Deployed ERC-20 token
+2. **Uniswap v3 Pool**: JOCX/USDT pool created on Uniswap v3
+3. **Staker Contract**: Uniswap v3 Staker contract with incentive program
+4. **WalletConnect Project**: Project ID from WalletConnect Cloud
+5. **RPC Provider**: Infura or Alchemy API key
 
-🔹 What the UI needs to do
+## 🚀 Deployment
 
-Connect Wallet (MetaMask, WalletConnect, etc.).
+### Vercel (Recommended)
 
-Deposit into Pool
+1. Push code to GitHub
+2. Connect repository to Vercel
+3. Add environment variables in Vercel dashboard
+4. Deploy
 
-Let users provide liquidity into the JOCX/USDT pool.
+### Other Platforms
 
-(Optional) If they only have ETH/USDC/etc., the UI can route via a swap (e.g., using Uniswap router) before adding liquidity.
+The app can be deployed to any platform that supports Next.js:
+- Netlify
+- AWS Amplify
+- Railway
+- Render
 
-Stake LP NFT
+## 🔒 Security Considerations
 
-After adding liquidity, users receive a Uniswap v3 NFT (their liquidity position).
+- All contract interactions use proper error handling
+- Slippage protection implemented for swaps and liquidity provision
+- User funds are never held by the application
+- All transactions require user approval
 
-The UI should let them stake this NFT into the Uniswap v3 Staker contract.
+## 🛠️ Customization
 
-Show Rewards
+### Styling
+- Modify `tailwind.config.js` for custom colors and themes
+- Update `src/styles/globals.css` for global styles
+- Component styles use Tailwind utility classes
 
-Display the 20% APY JOCX reward rate.
+### Contract Integration
+- Update ABIs in component files as needed
+- Modify `src/config/constants.ts` for different networks or contracts
+- Extend hooks for additional contract functionality
 
-Track accrued rewards for the connected wallet.
+## 📝 Notes
 
-Claim Rewards
+- This is a production-ready template but requires proper testing
+- Contract addresses are placeholders and must be updated
+- Consider implementing additional security measures for production
+- Monitor gas costs and optimize transactions as needed
 
-Allow users to claim JOCX rewards from the Staker contract.
+## 🤝 Support
+
+For questions or issues:
+1. Check the contract addresses are correct
+2. Ensure wallet is connected to the right network
+3. Verify environment variables are set properly
+4. Check browser console for detailed error messages

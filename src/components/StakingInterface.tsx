@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { useStakingRewards } from '@/hooks/useStakingRewards';
 import { CONTRACTS, STAKING_CONFIG } from '@/config/constants';
@@ -59,6 +59,7 @@ export function StakingInterface({ userPositions = [] }: StakingInterfaceProps) 
       refetchRewards();
     },
   });
+
 
   // Mock incentive ID - in production, this should be fetched from the contract
   const incentiveId = '0x0000000000000000000000000000000000000000000000000000000000000001';

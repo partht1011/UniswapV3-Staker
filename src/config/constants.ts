@@ -31,13 +31,6 @@ export const STAKING_CONFIG = {
   POOL_PAIR: 'JOCX/USDT',
 };
 
-// Network configuration
-export const NETWORK_CONFIG = {
-  CHAIN_ID: 1, // Ethereum Mainnet
-  CHAIN_NAME: 'Ethereum',
-  RPC_URL: 'https://mainnet.infura.io/v3/d392a7e8626740d3a48379f0a533af9a', // Replace with actual RPC
-};
-
 // UI Configuration
 export const UI_CONFIG = {
   APP_NAME: 'JOCX Liquidity Staking',

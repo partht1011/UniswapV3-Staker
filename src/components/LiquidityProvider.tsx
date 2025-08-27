@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { parseUnits } from 'viem';
 import { useTokenBalance } from '@/hooks/useTokenBalance';
+import { useTokenApproval } from '@/hooks/useTokenApproval';
 import { CONTRACTS, POOL_CONFIG } from '@/config/constants';
 import { TransactionStatus } from '@/types';
 import toast from 'react-hot-toast';
@@ -48,32 +49,98 @@ export function LiquidityProvider({ onLiquidityAdded }: LiquidityProviderProps) 
   const { address } = useAccount();
   const [jocxAmount, setJocxAmount] = useState('');
   const [usdtAmount, setUsdtAmount] = useState('');
-  const [status, setStatus] = useState<TransactionStatus>(TransactionStatus.IDLE);
+  const [available, setAvailable] = useState<boolean>(true);
+  const [currentStep, setCurrentStep] = useState<'approve' | 'liquidity'>('approve');
   const poolData = usePoolData();
 
   const { balance: jocxBalance, refetch: refetchJocx } = useTokenBalance(CONTRACTS.JOCX_TOKEN);
   const { balance: usdtBalance, refetch: refetchUsdt } = useTokenBalance(CONTRACTS.USDT_TOKEN);
 
-  const { writeContract, data: hash } = useWriteContract();
+  // Token approvals
+  const jocxApproval = useTokenApproval(CONTRACTS.JOCX_TOKEN, CONTRACTS.UNISWAP_V3_POSITION_MANAGER);
+  const usdtApproval = useTokenApproval(CONTRACTS.USDT_TOKEN, CONTRACTS.UNISWAP_V3_POSITION_MANAGER);
+
+  const { writeContract: addLiquidity, data: hash, isError} = useWriteContract();
   
-  const { isLoading: isConfirming } = useWaitForTransactionReceipt({
-    hash,
-    onSuccess: (data) => {
+  const { isSuccess } = useWaitForTransactionReceipt({
+    hash
+  });
+
+  useEffect(() => {
+    if(isError) {
+      setAvailable(true);
+      return;
+    }
+    if(isSuccess) {
       toast.success('Liquidity added successfully!');
-      setStatus(TransactionStatus.SUCCESS);
       refetchJocx();
       refetchUsdt();
+      setCurrentStep('approve');
+      setJocxAmount('');
+      setUsdtAmount('');
       // Extract tokenId from transaction logs in production
       onLiquidityAdded?.('1'); // Mock tokenId
-    },
-  });
+    }
+  }, [isError, isSuccess]);
+
+  // Handle approval success
+  useEffect(() => {
+    if (jocxApproval.isApprovalSuccess || usdtApproval.isApprovalSuccess) {
+      toast.success('Token approval successful!');
+    }
+  }, [jocxApproval.isApprovalSuccess, usdtApproval.isApprovalSuccess]);
+
+  // Handle approval errors
+  useEffect(() => {
+    if (jocxApproval.isApprovalError) {
+      toast.error('JOCX approval failed. Please try again.');
+      setAvailable(true);
+    }
+    if (usdtApproval.isApprovalError) {
+      toast.error('USDT approval failed. Please try again.');
+      setAvailable(true);
+    }
+  }, [jocxApproval.isApprovalError, usdtApproval.isApprovalError]);
+
+  const handleApproveTokens = async () => {
+    if (!address || !jocxAmount || !usdtAmount) return;
+
+    setAvailable(false);
+
+    try {
+      const needsJocxApproval = !jocxApproval.hasAllowance(jocxAmount);
+      const needsUsdtApproval = !usdtApproval.hasAllowance(usdtAmount);
+
+      if (needsJocxApproval && needsUsdtApproval) {
+        toast.error('Please approve tokens one at a time. Start with JOCX.');
+        setAvailable(true);
+        return;
+      }
+
+      if (needsJocxApproval) {
+        await jocxApproval.approveToken(jocxAmount);
+        toast.success('JOCX approval submitted!');
+      } else if (needsUsdtApproval) {
+        await usdtApproval.approveToken(usdtAmount);
+        toast.success('USDT approval submitted!');
+      } else {
+        // Both tokens are approved, move to liquidity step
+        setCurrentStep('liquidity');
+        setAvailable(true);
+      }
+    } catch (error) {
+      console.error('Token approval failed:', error);
+      toast.error('Failed to approve tokens. Please try again.');
+      setAvailable(true);
+    }
+  };
 
   const handleAddLiquidity = async () => {
     if (!address || !jocxAmount || !usdtAmount) return;
 
+    setAvailable(false);
+
     try {
-      setStatus(TransactionStatus.PENDING);
-      
       const amount0Desired = parseUnits(jocxAmount, 18);
       const amount1Desired = parseUnits(usdtAmount, 6); // USDT has 6 decimals
       const deadline = Math.floor(Date.now() / 1000) + 1800; // 30 minutes
@@ -82,7 +149,7 @@ export function LiquidityProvider({ onLiquidityAdded }: LiquidityProviderProps) 
       const tickLower = -887220; // Min tick
       const tickUpper = 887220;  // Max tick
 
-      await writeContract({
+      addLiquidity({
         address: CONTRACTS.UNISWAP_V3_POSITION_MANAGER as `0x${string}`,
         abi: POSITION_MANAGER_ABI,
         functionName: 'mint',
@@ -107,11 +174,40 @@ export function LiquidityProvider({ onLiquidityAdded }: LiquidityProviderProps) 
     } catch (error) {
       console.error('Add liquidity failed:', error);
       toast.error('Failed to add liquidity. Please try again.');
-      setStatus(TransactionStatus.ERROR);
+      setAvailable(true);
     }
   };
 
-  const isLoading = status === TransactionStatus.PENDING || isConfirming;
+  // Check if tokens need approval
+  const needsJocxApproval = jocxAmount && !jocxApproval.hasAllowance(jocxAmount);
+  const needsUsdtApproval = usdtAmount && !usdtApproval.hasAllowance(usdtAmount);
+  const needsApproval = needsJocxApproval || needsUsdtApproval;
+
+  // Determine current action
+  const getButtonText = () => {
+    if (!available) {
+      if (jocxApproval.isApproving || usdtApproval.isApproving) {
+        return 'Approving...';
+      }
+      return 'Adding Liquidity...';
+    }
+
+    if (needsJocxApproval) {
+      return 'Approve JOCX';
+    }
+    if (needsUsdtApproval) {
+      return 'Approve USDT';
+    }
+    return 'Add Liquidity & Mint NFT';
+  };
+
+  const handleButtonClick = () => {
+    if (needsApproval) {
+      handleApproveTokens();
+    } else {
+      handleAddLiquidity();
+    }
+  };
 
   return (
     <div className="card glow-effect group">
@@ -237,18 +333,49 @@ export function LiquidityProvider({ onLiquidityAdded }: LiquidityProviderProps) 
           </div>
         )}
 
+        {/* Approval Status */}
+        {(jocxAmount || usdtAmount) && (
+          <div className="card-compact bg-slate-50/80 space-y-2">
+            <h5 className="font-semibold text-slate-900 mb-2">Token Approvals</h5>
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-slate-600">JOCX</span>
+              <div className="flex items-center space-x-2">
+                {jocxAmount && jocxApproval.hasAllowance(jocxAmount) ? (
+                  <span className="text-green-600 font-semibold">✓ Approved</span>
+                ) : jocxAmount ? (
+                  <span className="text-orange-600 font-semibold">⚠ Needs Approval</span>
+                ) : (
+                  <span className="text-slate-400">-</span>
+                )}
+              </div>
+            </div>
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-slate-600">USDT</span>
+              <div className="flex items-center space-x-2">
+                {usdtAmount && usdtApproval.hasAllowance(usdtAmount) ? (
+                  <span className="text-green-600 font-semibold">✓ Approved</span>
+                ) : usdtAmount ? (
+                  <span className="text-orange-600 font-semibold">⚠ Needs Approval</span>
+                ) : (
+                  <span className="text-slate-400">-</span>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         <button
-          onClick={handleAddLiquidity}
-          disabled={!address || !jocxAmount || !usdtAmount || isLoading}
+          onClick={handleButtonClick}
+          disabled={!address || !jocxAmount || !usdtAmount || !available}
           className="btn-primary w-full text-lg py-4"
         >
-          {isLoading ? (
+          {!available ? (
             <div className="flex items-center justify-center space-x-2">
-              <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full"></div>
-              <span>Adding Liquidity...</span>
+              <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+              <span>{getButtonText()}</span>
             </div>
           ) : (
-            'Add Liquidity & Mint NFT'
+            getButtonText()
           )}
         </button>
       </div>
