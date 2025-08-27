@@ -3,86 +3,17 @@ import { useReadContract, useReadContracts, useAccount } from 'wagmi';
 import { formatUnits } from 'viem';
 import { CONTRACTS, POOL_CONFIG } from '@/config/constants';
 import { formatCurrency } from '@/utils/common';
-
-// Uniswap V3 Pool ABI
-const POOL_ABI = [
-  {
-    name: 'liquidity',
-    type: 'function',
-    stateMutability: 'view',
-    inputs: [],
-    outputs: [{ name: 'liquidity', type: 'uint128' }],
-  },
-  {
-    name: 'slot0',
-    type: 'function',
-    stateMutability: 'view',
-    inputs: [],
-    outputs: [
-      { name: 'sqrtPriceX96', type: 'uint160' },
-      { name: 'tick', type: 'int24' },
-      { name: 'observationIndex', type: 'uint16' },
-      { name: 'observationCardinality', type: 'uint16' },
-      { name: 'observationCardinalityNext', type: 'uint16' },
-      { name: 'feeProtocol', type: 'uint8' },
-      { name: 'unlocked', type: 'bool' },
-    ],
-  },
-  {
-    name: 'token0',
-    type: 'function',
-    stateMutability: 'view',
-    inputs: [],
-    outputs: [{ name: 'token0', type: 'address' }],
-  },
-  {
-    name: 'token1',
-    type: 'function',
-    stateMutability: 'view',
-    inputs: [],
-    outputs: [{ name: 'token1', type: 'address' }],
-  },
-] as const;
-
-// Uniswap V3 Factory ABI
-const FACTORY_ABI = [
-  {
-    name: 'getPool',
-    type: 'function',
-    stateMutability: 'view',
-    inputs: [
-      { name: 'tokenA', type: 'address' },
-      { name: 'tokenB', type: 'address' },
-      { name: 'fee', type: 'uint24' },
-    ],
-    outputs: [{ name: 'pool', type: 'address' }],
-  },
-] as const;
-
-// ERC20 ABI for token info
-const ERC20_ABI = [
-  {
-    name: 'totalSupply',
-    type: 'function',
-    stateMutability: 'view',
-    inputs: [],
-    outputs: [{ name: 'totalSupply', type: 'uint256' }],
-  },
-  {
-    name: 'balanceOf',
-    type: 'function',
-    stateMutability: 'view',
-    inputs: [{ name: 'account', type: 'address' }],
-    outputs: [{ name: 'balance', type: 'uint256' }],
-  },
-  {
-    name: 'decimals',
-    type: 'function',
-    stateMutability: 'view',
-    inputs: [],
-    outputs: [{ name: 'decimals', type: 'uint8' }],
-  },
-] as const;
+import { 
+  UNISWAP_V3_FACTORY_ABI, 
+  UNISWAP_V3_POOL_ABI, 
+  ERC20_ABI 
+} from '@/config/abis';
+import { 
+  createPool, 
+  calculateTokenPrice, 
+  JOCX_TOKEN, 
+  USDT_TOKEN 
+} from '@/utils/uniswapUtils';
 
 export interface PoolData {
   poolAddress: string | null;
@@ -110,7 +41,7 @@ export function usePoolData(): PoolData {
   // Get pool address from factory
   const { data: poolAddressData} = useReadContract({
     address: CONTRACTS.UNISWAP_V3_FACTORY as `0x${string}`,
-    abi: FACTORY_ABI,
+    abi: UNISWAP_V3_FACTORY_ABI,
     functionName: 'getPool',
     args: [
       CONTRACTS.JOCX_TOKEN as `0x${string}`,
@@ -132,12 +63,12 @@ export function usePoolData(): PoolData {
     contracts: poolAddress ? [
       {
         address: poolAddress as `0x${string}`,
-        abi: POOL_ABI,
+        abi: UNISWAP_V3_POOL_ABI,
         functionName: 'slot0',
       },
       {
         address: poolAddress as `0x${string}`,
-        abi: POOL_ABI,
+        abi: UNISWAP_V3_POOL_ABI,
         functionName: 'liquidity',
       },
       {
@@ -184,21 +115,23 @@ export function usePoolData(): PoolData {
         ) {
           const slot0Data = slot0Result.result;
           const sqrtPriceX96 = slot0Data[0];
+          const tick = slot0Data[1];
           const liquidityData = liquidityResult.result;
           const jocxBalance = jocxBalanceResult.result;
           const usdtBalance = usdtBalanceResult.result;
           const jocxDecimals = jocxDecimalsResult.result;
           const usdtDecimals = usdtDecimalsResult.result;
 
-          // Calculate JOCX price from sqrtPriceX96
-          // Price = (sqrtPriceX96 / 2^96)^2
-          const price = calculatePriceFromSqrtPriceX96(sqrtPriceX96, jocxDecimals, usdtDecimals);
+          // Create pool instance using SDK
+          const pool = createPool(sqrtPriceX96, liquidityData, tick);
+          
+          // Calculate JOCX price using SDK
+          const price = calculateTokenPrice(pool);
           setJocxPrice(price);
 
           // Calculate TVL
           const jocxBalanceFormatted = parseFloat(formatUnits(jocxBalance, jocxDecimals));
           const usdtBalanceFormatted = parseFloat(formatUnits(usdtBalance, usdtDecimals));
-
 
           const tvlValue = (jocxBalanceFormatted * price) + usdtBalanceFormatted;
           setTvl(formatCurrency(tvlValue));
@@ -253,11 +186,5 @@ export function usePoolData(): PoolData {
   };
 }
 
-// Helper function to calculate price from sqrtPriceX96
-function calculatePriceFromSqrtPriceX96(sqrtPriceX96: bigint, token0Decimals: number, token1Decimals: number): number {
-  const decimalAdjustment = 10 ** (token0Decimals - token1Decimals);
-  const sqrtPrice = sqrtPriceX96 * BigInt(decimalAdjustment) / BigInt(2 ** 96);
-  const price = Number(sqrtPrice) ** 2 / decimalAdjustment;
-  return price
-}
+// Note: Price calculation is now handled by the Uniswap v3 SDK in uniswapUtils.ts
 

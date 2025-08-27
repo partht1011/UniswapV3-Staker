@@ -8,67 +8,22 @@ import { CONTRACTS, POOL_CONFIG } from '@/config/constants';
 import { TransactionStatus } from '@/types';
 import toast from 'react-hot-toast';
 import { usePoolData } from '@/hooks/usePoolData';
+import { getBasicPositionInfo } from '@/utils/positionUtils';
+import { UNISWAP_V3_POSITION_MANAGER_ABI } from '@/config/abis';
+import { 
+  TOKEN_0, 
+  TOKEN_1, 
+  getFullRangeTickLower, 
+  getFullRangeTickUpper, 
+  getTickSpacing,
+  calculateSlippageAmounts,
+  JOCX_TOKEN,
+  USDT_TOKEN
+} from '@/utils/uniswapUtils';
 
 interface LiquidityProviderProps {
   onLiquidityAdded: () => void;
 }
-
-const POSITION_MANAGER_ABI = [
-  {
-    name: 'mint',
-    type: 'function',
-    stateMutability: 'payable',
-    inputs: [
-      {
-        name: 'params',
-        type: 'tuple',
-        components: [
-          { name: 'token0', type: 'address' },
-          { name: 'token1', type: 'address' },
-          { name: 'fee', type: 'uint24' },
-          { name: 'tickLower', type: 'int24' },
-          { name: 'tickUpper', type: 'int24' },
-          { name: 'amount0Desired', type: 'uint256' },
-          { name: 'amount1Desired', type: 'uint256' },
-          { name: 'amount0Min', type: 'uint256' },
-          { name: 'amount1Min', type: 'uint256' },
-          { name: 'recipient', type: 'address' },
-          { name: 'deadline', type: 'uint256' },
-        ],
-      },
-    ],
-    outputs: [
-      { name: 'tokenId', type: 'uint256' },
-      { name: 'liquidity', type: 'uint128' },
-      { name: 'amount0', type: 'uint256' },
-      { name: 'amount1', type: 'uint256' },
-    ],
-  },
-  {
-    name: 'increaseLiquidity',
-    type: 'function',
-    stateMutability: 'payable',
-    inputs: [
-      {
-        name: 'params',
-        type: 'tuple',
-        components: [
-          { name: 'tokenId', type: 'uint256' },
-          { name: 'amount0Desired', type: 'uint256' },
-          { name: 'amount1Desired', type: 'uint256' },
-          { name: 'amount0Min', type: 'uint256' },
-          { name: 'amount1Min', type: 'uint256' },
-          { name: 'deadline', type: 'uint256' },
-        ],
-      },
-    ],
-    outputs: [
-      { name: 'liquidity', type: 'uint128' },
-      { name: 'amount0', type: 'uint256' },
-      { name: 'amount1', type: 'uint256' },
-    ],
-  },
-] as const;
 
 export function LiquidityProvider({ onLiquidityAdded }: LiquidityProviderProps) {
   const { address } = useAccount();
@@ -171,47 +126,58 @@ export function LiquidityProvider({ onLiquidityAdded }: LiquidityProviderProps) 
     setAvailable(false);
 
     try {
-      const amount0Desired = parseUnits(jocxAmount, 18);
-      const amount1Desired = parseUnits(usdtAmount, 6); // USDT has 6 decimals
+      // Determine token amounts based on token order
+      const isJocxToken0 = TOKEN_0.address.toLowerCase() === JOCX_TOKEN.address.toLowerCase();
+      const jocxAmountParsed = parseUnits(jocxAmount, JOCX_TOKEN.decimals);
+      const usdtAmountParsed = parseUnits(usdtAmount, USDT_TOKEN.decimals);
+      
+      const amount0Desired = isJocxToken0 ? jocxAmountParsed : usdtAmountParsed;
+      const amount1Desired = isJocxToken0 ? usdtAmountParsed : jocxAmountParsed;
+      
       const deadline = Math.floor(Date.now() / 1000) + 1800; // 30 minutes
+
+      // Calculate slippage amounts using SDK utilities
+      const amount0Slippage = calculateSlippageAmounts(amount0Desired, 5);
+      const amount1Slippage = calculateSlippageAmounts(amount1Desired, 5);
 
       if (liquidityMode === 'existing' && selectedPositionId) {
         // Increase liquidity for existing position
         addLiquidity({
           address: CONTRACTS.UNISWAP_V3_POSITION_MANAGER as `0x${string}`,
-          abi: POSITION_MANAGER_ABI,
+          abi: UNISWAP_V3_POSITION_MANAGER_ABI,
           functionName: 'increaseLiquidity',
           args: [
             {
               tokenId: BigInt(selectedPositionId),
               amount0Desired,
               amount1Desired,
-              amount0Min: (amount0Desired * BigInt(95)) / BigInt(100), // 5% slippage
-              amount1Min: (amount1Desired * BigInt(95)) / BigInt(100), // 5% slippage
+              amount0Min: amount0Slippage.min,
+              amount1Min: amount1Slippage.min,
               deadline: BigInt(deadline),
             },
           ],
         });
       } else {
-        // Mint new position
-        const tickLower = -887220; // Min tick
-        const tickUpper = 887220;  // Max tick
+        // Mint new position using SDK utilities for tick calculation
+        const tickSpacing = getTickSpacing(POOL_CONFIG.FEE_TIER);
+        const tickLower = getFullRangeTickLower(tickSpacing);
+        const tickUpper = getFullRangeTickUpper(tickSpacing);
 
         addLiquidity({
           address: CONTRACTS.UNISWAP_V3_POSITION_MANAGER as `0x${string}`,
-          abi: POSITION_MANAGER_ABI,
+          abi: UNISWAP_V3_POSITION_MANAGER_ABI,
           functionName: 'mint',
           args: [
             {
-              token0: CONTRACTS.JOCX_TOKEN as `0x${string}`,
-              token1: CONTRACTS.USDT_TOKEN as `0x${string}`,
+              token0: TOKEN_0.address as `0x${string}`,
+              token1: TOKEN_1.address as `0x${string}`,
               fee: POOL_CONFIG.FEE_TIER,
               tickLower,
               tickUpper,
               amount0Desired,
               amount1Desired,
-              amount0Min: (amount0Desired * BigInt(95)) / BigInt(100), // 5% slippage
-              amount1Min: (amount1Desired * BigInt(95)) / BigInt(100), // 5% slippage
+              amount0Min: amount0Slippage.min,
+              amount1Min: amount1Slippage.min,
               recipient: address,
               deadline: BigInt(deadline),
             },
@@ -367,7 +333,9 @@ export function LiquidityProvider({ onLiquidityAdded }: LiquidityProviderProps) 
                           <div className="text-sm text-slate-500">
                             {(() => {
                               const position = positions.find(p => p.tokenId === selectedPositionId);
-                              return position ? `Fee: ${position.fee / 10000}% • Liquidity: ${parseFloat(formatUnits(BigInt(position.liquidity), 18)).toFixed(4)}` : '';
+                              if (!position) return '';
+                              const positionInfo = getBasicPositionInfo(position, CONTRACTS.JOCX_TOKEN, CONTRACTS.USDT_TOKEN, poolData.jocxPrice);
+                              return `Fee: ${positionInfo.feePercent}% • Value: $${positionInfo.estimatedValue}`;
                             })()}
                           </div>
                         </div>
@@ -414,13 +382,19 @@ export function LiquidityProvider({ onLiquidityAdded }: LiquidityProviderProps) 
                         </div>
                         <div className="flex-1">
                           <div className="font-semibold text-slate-900">Position #{position.tokenId}</div>
-                          <div className="text-sm text-slate-500">
-                            Fee: {position.fee / 10000}% • Liquidity: {parseFloat(formatUnits(BigInt(position.liquidity), 18)).toFixed(4)}
-                          </div>
-                          <div className="text-xs text-slate-400 mt-1">
-                            JOCX Fees: {parseFloat(formatUnits(BigInt(position.token0.toLowerCase() === CONTRACTS.JOCX_TOKEN.toLowerCase() ? position.tokensOwed0 : position.tokensOwed1), 18)).toFixed(6)} • 
-                            USDT Fees: {parseFloat(formatUnits(BigInt(position.token0.toLowerCase() === CONTRACTS.JOCX_TOKEN.toLowerCase() ? position.tokensOwed1 : position.tokensOwed0), 6)).toFixed(6)}
-                          </div>
+                          {(() => {
+                            const positionInfo = getBasicPositionInfo(position, CONTRACTS.JOCX_TOKEN, CONTRACTS.USDT_TOKEN, poolData.jocxPrice);
+                            return (
+                              <>
+                                <div className="text-sm text-slate-500">
+                                  Fee: {positionInfo.feePercent}% • Liquidity: {positionInfo.liquidityFormatted}
+                                </div>
+                                <div className="text-xs text-slate-400 mt-1">
+                                  Value: ${positionInfo.estimatedValue} • JOCX Fees: {positionInfo.jocxFees} • USDT Fees: {positionInfo.usdtFees}
+                                </div>
+                              </>
+                            );
+                          })()}
                         </div>
                         {selectedPositionId === position.tokenId && (
                           <div className="w-5 h-5 bg-purple-500 rounded-full flex items-center justify-center">

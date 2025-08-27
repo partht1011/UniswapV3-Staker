@@ -3,40 +3,10 @@ import { useReadContract, useReadContracts } from 'wagmi';
 import { formatUnits } from 'viem';
 import { CONTRACTS } from '@/config/constants';
 import { formatCurrency } from '@/utils/common';
+import { UNISWAP_V3_POSITION_MANAGER_ABI, UNISWAP_V3_STAKER_ABI } from '@/config/abis';
 
-// Uniswap V3 Position Manager ABI
-const POSITION_MANAGER_ABI = [
-  {
-    name: 'totalSupply',
-    type: 'function',
-    stateMutability: 'view',
-    inputs: [],
-    outputs: [{ name: 'totalSupply', type: 'uint256' }],
-  },
-  {
-    name: 'positions',
-    type: 'function',
-    stateMutability: 'view',
-    inputs: [{ name: 'tokenId', type: 'uint256' }],
-    outputs: [
-      { name: 'nonce', type: 'uint96' },
-      { name: 'operator', type: 'address' },
-      { name: 'token0', type: 'address' },
-      { name: 'token1', type: 'address' },
-      { name: 'fee', type: 'uint24' },
-      { name: 'tickLower', type: 'int24' },
-      { name: 'tickUpper', type: 'int24' },
-      { name: 'liquidity', type: 'uint128' },
-      { name: 'feeGrowthInside0LastX128', type: 'uint256' },
-      { name: 'feeGrowthInside1LastX128', type: 'uint256' },
-      { name: 'tokensOwed0', type: 'uint128' },
-      { name: 'tokensOwed1', type: 'uint128' },
-    ],
-  },
-] as const;
-
-// Staker contract ABI
-const STAKER_ABI = [
+// Additional staker ABI functions not in the main ABI
+const ADDITIONAL_STAKER_ABI = [
   {
     name: 'deposits',
     type: 'function',
@@ -73,7 +43,7 @@ export function useStakingStats(): StakingStats {
   // Get total supply of NFT positions
   const { data: totalSupplyData, isLoading: totalSupplyLoading } = useReadContract({
     address: CONTRACTS.UNISWAP_V3_POSITION_MANAGER as `0x${string}`,
-    abi: POSITION_MANAGER_ABI,
+    abi: UNISWAP_V3_POSITION_MANAGER_ABI,
     functionName: 'totalSupply',
   });
 

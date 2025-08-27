@@ -25,6 +25,7 @@ export default function Home() {
     // Refetch positions to get the latest data from blockchain
     refetchPositions();
     setActiveTab('stake');
+    
   };
 
   const tabs = [

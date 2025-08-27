@@ -5,39 +5,9 @@ import { useUserPositions } from '@/hooks/useUserPositions';
 import { CONTRACTS, STAKING_CONFIG } from '@/config/constants';
 import toast from 'react-hot-toast';
 import { formatUnits } from 'viem';
-const STAKER_ABI = [
-  {
-    name: 'stakeToken',
-    type: 'function',
-    stateMutability: 'nonpayable',
-    inputs: [
-      { name: 'incentiveId', type: 'bytes32' },
-      { name: 'tokenId', type: 'uint256' },
-    ],
-    outputs: [],
-  },
-  {
-    name: 'unstakeToken',
-    type: 'function',
-    stateMutability: 'nonpayable',
-    inputs: [
-      { name: 'incentiveId', type: 'bytes32' },
-      { name: 'tokenId', type: 'uint256' },
-    ],
-    outputs: [],
-  },
-  {
-    name: 'claimReward',
-    type: 'function',
-    stateMutability: 'nonpayable',
-    inputs: [
-      { name: 'rewardToken', type: 'address' },
-      { name: 'to', type: 'address' },
-      { name: 'amountRequested', type: 'uint256' },
-    ],
-    outputs: [{ name: 'reward', type: 'uint256' }],
-  },
-] as const;
+import { usePoolData } from '@/hooks/usePoolData';
+import { getBasicPositionInfo } from '@/utils/positionUtils';
+import { UNISWAP_V3_STAKER_ABI } from '@/config/abis';
 
 interface StakingInterfaceProps {
   userPositions?: string[]; // Array of NFT token IDs
@@ -51,6 +21,7 @@ export function StakingInterface({ userPositions = [] }: StakingInterfaceProps) 
   
   const { rewards, refetch: refetchRewards } = useStakingRewards();
   const { positions, isLoading: isLoadingPositions } = useUserPositions();
+  const poolData = usePoolData();
   const { writeContract, data: hash, isError } = useWriteContract();
   
   const { isSuccess } = useWaitForTransactionReceipt({
@@ -78,7 +49,7 @@ export function StakingInterface({ userPositions = [] }: StakingInterfaceProps) 
       
       writeContract({
         address: CONTRACTS.UNISWAP_V3_STAKER as `0x${string}`,
-        abi: STAKER_ABI,
+        abi: UNISWAP_V3_STAKER_ABI,
         functionName: 'stakeToken',
         args: [incentiveId as `0x${string}`, BigInt(selectedTokenId)],
       });
@@ -99,7 +70,7 @@ export function StakingInterface({ userPositions = [] }: StakingInterfaceProps) 
       
       writeContract({
         address: CONTRACTS.UNISWAP_V3_STAKER as `0x${string}`,
-        abi: STAKER_ABI,
+        abi: UNISWAP_V3_STAKER_ABI,
         functionName: 'unstakeToken',
         args: [incentiveId as `0x${string}`, BigInt(selectedTokenId)],
       });
@@ -120,7 +91,7 @@ export function StakingInterface({ userPositions = [] }: StakingInterfaceProps) 
       
       writeContract({
         address: CONTRACTS.UNISWAP_V3_STAKER as `0x${string}`,
-        abi: STAKER_ABI,
+        abi: UNISWAP_V3_STAKER_ABI,
         functionName: 'claimReward',
         args: [
           CONTRACTS.JOCX_TOKEN as `0x${string}`,
@@ -262,7 +233,9 @@ export function StakingInterface({ userPositions = [] }: StakingInterfaceProps) 
                             <div className="text-sm text-slate-500">
                               {(() => {
                                 const position = positions.find(p => p.tokenId === selectedTokenId);
-                                return position ? `Fee: ${position.fee / 10000}% • Liquidity: ${parseFloat(formatUnits(BigInt(position.liquidity), 18)).toFixed(4)}` : '';
+                                if (!position) return '';
+                                const positionInfo = getBasicPositionInfo(position, CONTRACTS.JOCX_TOKEN, CONTRACTS.USDT_TOKEN, poolData.jocxPrice);
+                                return `Fee: ${positionInfo.feePercent}% • Value: $${positionInfo.estimatedValue}`;
                               })()}
                             </div>
                           </div>
@@ -309,13 +282,19 @@ export function StakingInterface({ userPositions = [] }: StakingInterfaceProps) 
                           </div>
                           <div className="flex-1">
                             <div className="font-semibold text-slate-900">Position #{position.tokenId}</div>
-                            <div className="text-sm text-slate-500">
-                              Fee: {position.fee / 10000}% • Liquidity: {parseFloat(formatUnits(BigInt(position.liquidity), 18)).toFixed(4)}
-                            </div>
-                            <div className="text-xs text-slate-400 mt-1">
-                              JOCX Fees: {parseFloat(formatUnits(BigInt(position.token0.toLowerCase() === CONTRACTS.JOCX_TOKEN.toLowerCase() ? position.tokensOwed0 : position.tokensOwed1), 18)).toFixed(6)} • 
-                              USDT Fees: {parseFloat(formatUnits(BigInt(position.token0.toLowerCase() === CONTRACTS.JOCX_TOKEN.toLowerCase() ? position.tokensOwed1 : position.tokensOwed0), 6)).toFixed(6)}
-                            </div>
+                            {(() => {
+                              const positionInfo = getBasicPositionInfo(position, CONTRACTS.JOCX_TOKEN, CONTRACTS.USDT_TOKEN, poolData.jocxPrice);
+                              return (
+                                <>
+                                  <div className="text-sm text-slate-500">
+                                    Fee: {positionInfo.feePercent}% • Liquidity: {positionInfo.liquidityFormatted}
+                                  </div>
+                                  <div className="text-xs text-slate-400 mt-1">
+                                    Value: ${positionInfo.estimatedValue} • JOCX Fees: {positionInfo.jocxFees} • USDT Fees: {positionInfo.usdtFees}
+                                  </div>
+                                </>
+                              );
+                            })()}
                           </div>
                           {selectedTokenId === position.tokenId && (
                             <div className="w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center">

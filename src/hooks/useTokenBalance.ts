@@ -1,23 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAccount, useReadContract } from 'wagmi';
 import { formatUnits } from 'viem';
-
-const ERC20_ABI = [
-  {
-    name: 'balanceOf',
-    type: 'function',
-    stateMutability: 'view',
-    inputs: [{ name: 'account', type: 'address' }],
-    outputs: [{ name: 'balance', type: 'uint256' }],
-  },
-  {
-    name: 'decimals',
-    type: 'function',
-    stateMutability: 'view',
-    inputs: [],
-    outputs: [{ name: 'decimals', type: 'uint8' }],
-  },
-] as const;
+import { ERC20_ABI } from '@/config/abis';
 
 export function useTokenBalance(tokenAddress: string) {
   const { address } = useAccount();

@@ -1,46 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAccount, useReadContract, useReadContracts } from 'wagmi';
 import { CONTRACTS } from '@/config/constants';
-
-const POSITION_MANAGER_ABI = [
-  {
-    name: 'balanceOf',
-    type: 'function',
-    stateMutability: 'view',
-    inputs: [{ name: 'owner', type: 'address' }],
-    outputs: [{ name: 'balance', type: 'uint256' }],
-  },
-  {
-    name: 'tokenOfOwnerByIndex',
-    type: 'function',
-    stateMutability: 'view',
-    inputs: [
-      { name: 'owner', type: 'address' },
-      { name: 'index', type: 'uint256' }
-    ],
-    outputs: [{ name: 'tokenId', type: 'uint256' }],
-  },
-  {
-    name: 'positions',
-    type: 'function',
-    stateMutability: 'view',
-    inputs: [{ name: 'tokenId', type: 'uint256' }],
-    outputs: [
-      { name: 'nonce', type: 'uint96' },
-      { name: 'operator', type: 'address' },
-      { name: 'token0', type: 'address' },
-      { name: 'token1', type: 'address' },
-      { name: 'fee', type: 'uint24' },
-      { name: 'tickLower', type: 'int24' },
-      { name: 'tickUpper', type: 'int24' },
-      { name: 'liquidity', type: 'uint128' },
-      { name: 'feeGrowthInside0LastX128', type: 'uint256' },
-      { name: 'feeGrowthInside1LastX128', type: 'uint256' },
-      { name: 'tokensOwed0', type: 'uint128' },
-      { name: 'tokensOwed1', type: 'uint128' },
-    ],
-  },
-] as const;
+import { UNISWAP_V3_POSITION_MANAGER_ABI } from '@/config/abis';
 
 export interface Position {
   tokenId: string;
@@ -63,7 +24,7 @@ export function useUserPositions() {
   // Get the number of positions owned by the user
   const { data: balance, isLoading: isLoadingBalance, refetch: refetchBalance } = useReadContract({
     address: CONTRACTS.UNISWAP_V3_POSITION_MANAGER as `0x${string}`,
-    abi: POSITION_MANAGER_ABI,
+    abi: UNISWAP_V3_POSITION_MANAGER_ABI,
     functionName: 'balanceOf',
     args: address ? [address] : undefined,
     query: {
@@ -74,7 +35,7 @@ export function useUserPositions() {
   // Create contracts array for fetching token IDs
   const tokenIdContracts = balance ? Array.from({ length: Number(balance) }, (_, i) => ({
     address: CONTRACTS.UNISWAP_V3_POSITION_MANAGER as `0x${string}`,
-    abi: POSITION_MANAGER_ABI,
+    abi: UNISWAP_V3_POSITION_MANAGER_ABI,
     functionName: 'tokenOfOwnerByIndex' as const,
     args: [address!, BigInt(i)],
   })) : [];
@@ -90,7 +51,7 @@ export function useUserPositions() {
   // Create contracts array for fetching position details
   const positionContracts = tokenIds.map(tokenId => ({
     address: CONTRACTS.UNISWAP_V3_POSITION_MANAGER as `0x${string}`,
-    abi: POSITION_MANAGER_ABI,
+    abi: UNISWAP_V3_POSITION_MANAGER_ABI,
     functionName: 'positions' as const,
     args: [BigInt(tokenId)],
   }));
