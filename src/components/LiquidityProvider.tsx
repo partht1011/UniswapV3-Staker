@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
-import { parseUnits } from 'viem';
+import { parseUnits, formatUnits } from 'viem';
 import { useTokenBalance } from '@/hooks/useTokenBalance';
 import { useTokenApproval } from '@/hooks/useTokenApproval';
+import { useUserPositions } from '@/hooks/useUserPositions';
 import { CONTRACTS, POOL_CONFIG } from '@/config/constants';
 import { TransactionStatus } from '@/types';
 import toast from 'react-hot-toast';
@@ -43,6 +44,30 @@ const POSITION_MANAGER_ABI = [
       { name: 'amount1', type: 'uint256' },
     ],
   },
+  {
+    name: 'increaseLiquidity',
+    type: 'function',
+    stateMutability: 'payable',
+    inputs: [
+      {
+        name: 'params',
+        type: 'tuple',
+        components: [
+          { name: 'tokenId', type: 'uint256' },
+          { name: 'amount0Desired', type: 'uint256' },
+          { name: 'amount1Desired', type: 'uint256' },
+          { name: 'amount0Min', type: 'uint256' },
+          { name: 'amount1Min', type: 'uint256' },
+          { name: 'deadline', type: 'uint256' },
+        ],
+      },
+    ],
+    outputs: [
+      { name: 'liquidity', type: 'uint128' },
+      { name: 'amount0', type: 'uint256' },
+      { name: 'amount1', type: 'uint256' },
+    ],
+  },
 ] as const;
 
 export function LiquidityProvider({ onLiquidityAdded }: LiquidityProviderProps) {
@@ -51,7 +76,12 @@ export function LiquidityProvider({ onLiquidityAdded }: LiquidityProviderProps) 
   const [usdtAmount, setUsdtAmount] = useState('');
   const [available, setAvailable] = useState<boolean>(true);
   const [currentStep, setCurrentStep] = useState<'approve' | 'liquidity'>('approve');
+  const [liquidityMode, setLiquidityMode] = useState<'new' | 'existing'>('new');
+  const [selectedPositionId, setSelectedPositionId] = useState('');
+  const [isPositionSelectorOpen, setIsPositionSelectorOpen] = useState(false);
+  
   const poolData = usePoolData();
+  const { positions, isLoading: isLoadingPositions } = useUserPositions();
 
   const { balance: jocxBalance, refetch: refetchJocx } = useTokenBalance(CONTRACTS.JOCX_TOKEN);
   const { balance: usdtBalance, refetch: refetchUsdt } = useTokenBalance(CONTRACTS.USDT_TOKEN);
@@ -145,30 +175,49 @@ export function LiquidityProvider({ onLiquidityAdded }: LiquidityProviderProps) 
       const amount1Desired = parseUnits(usdtAmount, 6); // USDT has 6 decimals
       const deadline = Math.floor(Date.now() / 1000) + 1800; // 30 minutes
 
-      // Calculate tick range (simplified - in production, use proper price calculations)
-      const tickLower = -887220; // Min tick
-      const tickUpper = 887220;  // Max tick
+      if (liquidityMode === 'existing' && selectedPositionId) {
+        // Increase liquidity for existing position
+        addLiquidity({
+          address: CONTRACTS.UNISWAP_V3_POSITION_MANAGER as `0x${string}`,
+          abi: POSITION_MANAGER_ABI,
+          functionName: 'increaseLiquidity',
+          args: [
+            {
+              tokenId: BigInt(selectedPositionId),
+              amount0Desired,
+              amount1Desired,
+              amount0Min: (amount0Desired * BigInt(95)) / BigInt(100), // 5% slippage
+              amount1Min: (amount1Desired * BigInt(95)) / BigInt(100), // 5% slippage
+              deadline: BigInt(deadline),
+            },
+          ],
+        });
+      } else {
+        // Mint new position
+        const tickLower = -887220; // Min tick
+        const tickUpper = 887220;  // Max tick
 
-      addLiquidity({
-        address: CONTRACTS.UNISWAP_V3_POSITION_MANAGER as `0x${string}`,
-        abi: POSITION_MANAGER_ABI,
-        functionName: 'mint',
-        args: [
-          {
-            token0: CONTRACTS.JOCX_TOKEN as `0x${string}`,
-            token1: CONTRACTS.USDT_TOKEN as `0x${string}`,
-            fee: POOL_CONFIG.FEE_TIER,
-            tickLower,
-            tickUpper,
-            amount0Desired,
-            amount1Desired,
-            amount0Min: (amount0Desired * BigInt(95)) / BigInt(100), // 5% slippage
-            amount1Min: (amount1Desired * BigInt(95)) / BigInt(100), // 5% slippage
-            recipient: address,
-            deadline: BigInt(deadline),
-          },
-        ],
-      });
+        addLiquidity({
+          address: CONTRACTS.UNISWAP_V3_POSITION_MANAGER as `0x${string}`,
+          abi: POSITION_MANAGER_ABI,
+          functionName: 'mint',
+          args: [
+            {
+              token0: CONTRACTS.JOCX_TOKEN as `0x${string}`,
+              token1: CONTRACTS.USDT_TOKEN as `0x${string}`,
+              fee: POOL_CONFIG.FEE_TIER,
+              tickLower,
+              tickUpper,
+              amount0Desired,
+              amount1Desired,
+              amount0Min: (amount0Desired * BigInt(95)) / BigInt(100), // 5% slippage
+              amount1Min: (amount1Desired * BigInt(95)) / BigInt(100), // 5% slippage
+              recipient: address,
+              deadline: BigInt(deadline),
+            },
+          ],
+        });
+      }
 
       toast.success('Liquidity transaction submitted!');
     } catch (error) {
@@ -198,10 +247,15 @@ export function LiquidityProvider({ onLiquidityAdded }: LiquidityProviderProps) 
     if (needsUsdtApproval) {
       return 'Approve USDT';
     }
-    return 'Add Liquidity & Mint NFT';
+    return liquidityMode === 'existing' ? 'Add Liquidity to Position' : 'Add Liquidity & Mint NFT';
   };
 
   const handleButtonClick = () => {
+    if (liquidityMode === 'existing' && !selectedPositionId) {
+      toast.error('Please select a position to add liquidity to.');
+      return;
+    }
+    
     if (needsApproval) {
       handleApproveTokens();
     } else {
@@ -224,6 +278,166 @@ export function LiquidityProvider({ onLiquidityAdded }: LiquidityProviderProps) 
       </div>
 
       <div className="space-y-6">
+        {/* Liquidity Mode Selection */}
+        <div className="space-y-4">
+          <label className="block text-sm font-semibold text-slate-700">
+            Liquidity Mode
+          </label>
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              onClick={() => {
+                setLiquidityMode('new');
+                setSelectedPositionId('');
+              }}
+              className={`p-4 rounded-xl border-2 transition-all duration-200 ${
+                liquidityMode === 'new'
+                  ? 'border-blue-500 bg-blue-50 text-blue-700'
+                  : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+              }`}
+            >
+              <div className="flex flex-col items-center space-y-2">
+                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                  liquidityMode === 'new' ? 'bg-blue-500 text-white' : 'bg-slate-100 text-slate-500'
+                }`}>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                  </svg>
+                </div>
+                <div className="text-center">
+                  <div className="font-semibold text-sm">New Position</div>
+                  <div className="text-xs opacity-75">Mint new NFT</div>
+                </div>
+              </div>
+            </button>
+            
+            <button
+              onClick={() => setLiquidityMode('existing')}
+              disabled={positions.length === 0}
+              className={`p-4 rounded-xl border-2 transition-all duration-200 ${
+                liquidityMode === 'existing'
+                  ? 'border-purple-500 bg-purple-50 text-purple-700'
+                  : positions.length === 0
+                  ? 'border-slate-200 bg-slate-50 text-slate-400 cursor-not-allowed'
+                  : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+              }`}
+            >
+              <div className="flex flex-col items-center space-y-2">
+                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                  liquidityMode === 'existing' 
+                    ? 'bg-purple-500 text-white' 
+                    : positions.length === 0
+                    ? 'bg-slate-100 text-slate-400'
+                    : 'bg-slate-100 text-slate-500'
+                }`}>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
+                  </svg>
+                </div>
+                <div className="text-center">
+                  <div className="font-semibold text-sm">Add to Existing</div>
+                  <div className="text-xs opacity-75">
+                    {positions.length === 0 ? 'No positions' : `${positions.length} available`}
+                  </div>
+                </div>
+              </div>
+            </button>
+          </div>
+        </div>
+
+        {/* Position Selector for Existing Mode */}
+        {liquidityMode === 'existing' && positions.length > 0 && (
+          <div className="space-y-3">
+            <label className="block text-sm font-semibold text-slate-700">
+              Select Position
+            </label>
+            <div className="relative">
+              <button
+                onClick={() => setIsPositionSelectorOpen(!isPositionSelectorOpen)}
+                className="w-full p-4 bg-white border-2 border-slate-200 rounded-xl text-left hover:border-slate-300 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    {selectedPositionId ? (
+                      <>
+                        <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-600 rounded-lg flex items-center justify-center">
+                          <span className="text-white font-bold text-sm">#</span>
+                        </div>
+                        <div>
+                          <div className="font-semibold text-slate-900">Position #{selectedPositionId}</div>
+                          <div className="text-sm text-slate-500">
+                            {(() => {
+                              const position = positions.find(p => p.tokenId === selectedPositionId);
+                              return position ? `Fee: ${position.fee / 10000}% • Liquidity: ${parseFloat(formatUnits(BigInt(position.liquidity), 18)).toFixed(4)}` : '';
+                            })()}
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center">
+                          <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </div>
+                        <div>
+                          <div className="font-semibold text-slate-900">Choose a position...</div>
+                          <div className="text-sm text-slate-500">Select from your {positions.length} positions</div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                  <svg 
+                    className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${isPositionSelectorOpen ? 'rotate-180' : ''}`} 
+                    fill="none" 
+                    stroke="currentColor" 
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
+              </button>
+              
+              {isPositionSelectorOpen && (
+                <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-xl shadow-xl z-10 max-h-64 overflow-y-auto">
+                  {positions.map((position) => (
+                    <button
+                      key={position.tokenId}
+                      onClick={() => {
+                        setSelectedPositionId(position.tokenId);
+                        setIsPositionSelectorOpen(false);
+                      }}
+                      className="w-full p-4 text-left hover:bg-slate-50 transition-colors duration-150 border-b border-slate-100 last:border-b-0 first:rounded-t-xl last:rounded-b-xl"
+                    >
+                      <div className="flex items-center space-x-3">
+                        <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-600 rounded-lg flex items-center justify-center">
+                          <span className="text-white font-bold text-sm">#</span>
+                        </div>
+                        <div className="flex-1">
+                          <div className="font-semibold text-slate-900">Position #{position.tokenId}</div>
+                          <div className="text-sm text-slate-500">
+                            Fee: {position.fee / 10000}% • Liquidity: {parseFloat(formatUnits(BigInt(position.liquidity), 18)).toFixed(4)}
+                          </div>
+                          <div className="text-xs text-slate-400 mt-1">
+                            JOCX Fees: {parseFloat(formatUnits(BigInt(position.token0.toLowerCase() === CONTRACTS.JOCX_TOKEN.toLowerCase() ? position.tokensOwed0 : position.tokensOwed1), 18)).toFixed(6)} • 
+                            USDT Fees: {parseFloat(formatUnits(BigInt(position.token0.toLowerCase() === CONTRACTS.JOCX_TOKEN.toLowerCase() ? position.tokensOwed1 : position.tokensOwed0), 6)).toFixed(6)}
+                          </div>
+                        </div>
+                        {selectedPositionId === position.tokenId && (
+                          <div className="w-5 h-5 bg-purple-500 rounded-full flex items-center justify-center">
+                            <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                          </div>
+                        )}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Token Pair Display */}
         <div className="flex items-center justify-center space-x-4 py-4">
           <div className="flex items-center space-x-2">
@@ -273,15 +487,6 @@ export function LiquidityProvider({ onLiquidityAdded }: LiquidityProviderProps) 
           </div>
         </div>
 
-        {/* Plus Icon */}
-        <div className="flex justify-center">
-          <div className="w-8 h-8 bg-gradient-to-br from-slate-100 to-slate-200 rounded-full flex items-center justify-center">
-            <svg className="w-4 h-4 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-            </svg>
-          </div>
-        </div>
-
         {/* USDT Amount */}
         <div className="space-y-3">
           <label className="block text-sm font-semibold text-slate-700">
@@ -313,25 +518,6 @@ export function LiquidityProvider({ onLiquidityAdded }: LiquidityProviderProps) 
             </span>
           </div>
         </div>
-
-        {/* Position Preview */}
-        {jocxAmount && usdtAmount && (
-          <div className="card-compact bg-slate-50/80 space-y-2">
-            <h5 className="font-semibold text-slate-900 mb-2">Position Preview</h5>
-            <div className="flex justify-between text-sm">
-              <span className="text-slate-600">Pool Share</span>
-              <span className="font-semibold text-slate-900">~0.05%</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-slate-600">LP Tokens</span>
-              <span className="font-semibold text-slate-900">~{Math.sqrt(parseFloat(jocxAmount) * parseFloat(usdtAmount)).toFixed(4)}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-slate-600">Est. APR</span>
-              <span className="font-semibold text-green-600">~15.2%</span>
-            </div>
-          </div>
-        )}
 
         {/* Approval Status */}
         {(jocxAmount || usdtAmount) && (

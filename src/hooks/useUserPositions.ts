@@ -139,6 +139,8 @@ export function useUserPositions() {
             tokensOwed1,
           ] = result.result;
 
+          console.log('Processing position:', result);
+
           // Filter for JOCX/USDT positions only
           const isJocxUsdtPosition = 
             (token0.toLowerCase() === CONTRACTS.JOCX_TOKEN.toLowerCase() && 
@@ -147,7 +149,7 @@ export function useUserPositions() {
              token1.toLowerCase() === CONTRACTS.JOCX_TOKEN.toLowerCase());
 
           // Only include positions with liquidity > 0
-          if (isJocxUsdtPosition && BigInt(liquidity) > 0n) {
+          if (isJocxUsdtPosition && BigInt(liquidity) > BigInt(0)) {
             validPositions.push({
               tokenId,
               token0: token0 as string,

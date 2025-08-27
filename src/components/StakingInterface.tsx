@@ -3,11 +3,8 @@ import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagm
 import { useStakingRewards } from '@/hooks/useStakingRewards';
 import { useUserPositions } from '@/hooks/useUserPositions';
 import { CONTRACTS, STAKING_CONFIG } from '@/config/constants';
-import { TransactionStatus } from '@/types';
 import toast from 'react-hot-toast';
 import { formatUnits } from 'viem';
-import { tree } from 'next/dist/build/templates/app-page';
-
 const STAKER_ABI = [
   {
     name: 'stakeToken',
@@ -50,6 +47,7 @@ export function StakingInterface({ userPositions = [] }: StakingInterfaceProps) 
   const { address } = useAccount();
   const [selectedTokenId, setSelectedTokenId] = useState('');
   const [available, setAvailable] = useState<boolean>(true);
+  const [isPositionSelectorOpen, setIsPositionSelectorOpen] = useState(false);
   
   const { rewards, refetch: refetchRewards } = useStakingRewards();
   const { positions, isLoading: isLoadingPositions } = useUserPositions();
@@ -243,22 +241,95 @@ export function StakingInterface({ userPositions = [] }: StakingInterfaceProps) 
           </div>
         ) : (
           <div className="space-y-6">
-            <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-3">
+            <div className="space-y-3">
+              <label className="block text-sm font-semibold text-slate-700">
                 Select Position to Stake
               </label>
-              <select
-                value={selectedTokenId}
-                onChange={(e) => setSelectedTokenId(e.target.value)}
-                className="input-field text-center font-semibold"
-              >
-                <option value="">Choose a position...</option>
-                {positions.map((position) => (
-                  <option key={position.tokenId} value={position.tokenId}>
-                    Position #{position.tokenId} - JOCX/USDT LP (Fee: {position.fee / 10000}%)
-                  </option>
-                ))}
-              </select>
+              <div className="relative">
+                <button
+                  onClick={() => setIsPositionSelectorOpen(!isPositionSelectorOpen)}
+                  className="w-full p-4 bg-white border-2 border-slate-200 rounded-xl text-left hover:border-slate-300 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                      {selectedTokenId ? (
+                        <>
+                          <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center">
+                            <span className="text-white font-bold text-sm">#</span>
+                          </div>
+                          <div>
+                            <div className="font-semibold text-slate-900">Position #{selectedTokenId}</div>
+                            <div className="text-sm text-slate-500">
+                              {(() => {
+                                const position = positions.find(p => p.tokenId === selectedTokenId);
+                                return position ? `Fee: ${position.fee / 10000}% • Liquidity: ${parseFloat(formatUnits(BigInt(position.liquidity), 18)).toFixed(4)}` : '';
+                              })()}
+                            </div>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center">
+                            <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                            </svg>
+                          </div>
+                          <div>
+                            <div className="font-semibold text-slate-900">Choose a position...</div>
+                            <div className="text-sm text-slate-500">Select from your {positions.length} positions</div>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                    <svg 
+                      className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${isPositionSelectorOpen ? 'rotate-180' : ''}`} 
+                      fill="none" 
+                      stroke="currentColor" 
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </div>
+                </button>
+                
+                {isPositionSelectorOpen && (
+                  <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-xl shadow-xl z-10 max-h-64 overflow-y-auto">
+                    {positions.map((position) => (
+                      <button
+                        key={position.tokenId}
+                        onClick={() => {
+                          setSelectedTokenId(position.tokenId);
+                          setIsPositionSelectorOpen(false);
+                        }}
+                        className="w-full p-4 text-left hover:bg-slate-50 transition-colors duration-150 border-b border-slate-100 last:border-b-0 first:rounded-t-xl last:rounded-b-xl"
+                      >
+                        <div className="flex items-center space-x-3">
+                          <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center">
+                            <span className="text-white font-bold text-sm">#</span>
+                          </div>
+                          <div className="flex-1">
+                            <div className="font-semibold text-slate-900">Position #{position.tokenId}</div>
+                            <div className="text-sm text-slate-500">
+                              Fee: {position.fee / 10000}% • Liquidity: {parseFloat(formatUnits(BigInt(position.liquidity), 18)).toFixed(4)}
+                            </div>
+                            <div className="text-xs text-slate-400 mt-1">
+                              JOCX Fees: {parseFloat(formatUnits(BigInt(position.token0.toLowerCase() === CONTRACTS.JOCX_TOKEN.toLowerCase() ? position.tokensOwed0 : position.tokensOwed1), 18)).toFixed(6)} • 
+                              USDT Fees: {parseFloat(formatUnits(BigInt(position.token0.toLowerCase() === CONTRACTS.JOCX_TOKEN.toLowerCase() ? position.tokensOwed1 : position.tokensOwed0), 6)).toFixed(6)}
+                            </div>
+                          </div>
+                          {selectedTokenId === position.tokenId && (
+                            <div className="w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center">
+                              <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                            </div>
+                          )}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
 
             {selectedTokenId && (() => {
