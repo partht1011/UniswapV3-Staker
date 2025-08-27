@@ -9,7 +9,7 @@ import toast from 'react-hot-toast';
 import { usePoolData } from '@/hooks/usePoolData';
 
 interface LiquidityProviderProps {
-  onLiquidityAdded?: (tokenId: string) => void;
+  onLiquidityAdded: () => void;
 }
 
 const POSITION_MANAGER_ABI = [
@@ -79,7 +79,7 @@ export function LiquidityProvider({ onLiquidityAdded }: LiquidityProviderProps) 
       setJocxAmount('');
       setUsdtAmount('');
       // Extract tokenId from transaction logs in production
-      onLiquidityAdded?.('1'); // Mock tokenId
+      onLiquidityAdded(); // Mock tokenId
     }
   }, [isError, isSuccess]);
 

@@ -6,7 +6,7 @@ import { LiquidityProvider } from '@/components/LiquidityProvider';
 import { StakingInterface } from '@/components/StakingInterface';
 import { usePoolData } from '@/hooks/usePoolData';
 import { useStakingStats } from '@/hooks/useStakingStats';
-import { usePriceData } from '@/hooks/usePriceData';
+import { useUserPositions } from '@/hooks/useUserPositions';
 import { DataDashboard } from '@/components/DataDashboard';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { UI_CONFIG, STAKING_CONFIG } from '@/config/constants';
@@ -15,15 +15,15 @@ export default function Home() {
   // const { isConnected } = useAccount();
   const isConnected = true;
   const [activeTab, setActiveTab] = useState<'liquidity' | 'stake'>('liquidity');
-  const [userPositions, setUserPositions] = useState<string[]>([]);
   
   // Fetch real data
   const poolData = usePoolData();
   const stakingStats = useStakingStats();
-  const priceData = usePriceData();
+  const { positions, isLoading: isLoadingPositions, refetch: refetchPositions, tokenIds } = useUserPositions();
 
-  const handleLiquidityAdded = (tokenId: string) => {
-    setUserPositions(prev => [...prev, tokenId]);
+  const handleLiquidityAdded = () => {
+    // Refetch positions to get the latest data from blockchain
+    refetchPositions();
     setActiveTab('stake');
   };
 
@@ -198,7 +198,7 @@ export default function Home() {
                         <LiquidityProvider onLiquidityAdded={handleLiquidityAdded} />
                       )}
                       {activeTab === 'stake' && (
-                        <StakingInterface userPositions={userPositions} />
+                        <StakingInterface userPositions={tokenIds} />
                       )}
                     </div>
 

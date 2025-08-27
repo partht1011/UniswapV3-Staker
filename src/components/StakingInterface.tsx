@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { useStakingRewards } from '@/hooks/useStakingRewards';
+import { useUserPositions } from '@/hooks/useUserPositions';
 import { CONTRACTS, STAKING_CONFIG } from '@/config/constants';
 import { TransactionStatus } from '@/types';
 import toast from 'react-hot-toast';
+import { formatUnits } from 'viem';
+import { tree } from 'next/dist/build/templates/app-page';
 
 const STAKER_ABI = [
   {
@@ -46,19 +49,24 @@ interface StakingInterfaceProps {
 export function StakingInterface({ userPositions = [] }: StakingInterfaceProps) {
   const { address } = useAccount();
   const [selectedTokenId, setSelectedTokenId] = useState('');
-  const [status, setStatus] = useState<TransactionStatus>(TransactionStatus.IDLE);
+  const [available, setAvailable] = useState<boolean>(true);
   
   const { rewards, refetch: refetchRewards } = useStakingRewards();
-  const { writeContract, data: hash } = useWriteContract();
+  const { positions, isLoading: isLoadingPositions } = useUserPositions();
+  const { writeContract, data: hash, isError } = useWriteContract();
   
-  const { isLoading: isConfirming } = useWaitForTransactionReceipt({
-    hash,
-    onSuccess: () => {
-      toast.success('Transaction completed successfully!');
-      setStatus(TransactionStatus.SUCCESS);
-      refetchRewards();
-    },
-  });
+  const { isSuccess } = useWaitForTransactionReceipt({
+    hash
+  });  
+  
+  useEffect(() => {
+    if(isError) {
+      setAvailable(true);
+      return;
+    }
+    if(isSuccess) {
+    }
+  }, [isError, isSuccess]);
 
 
   // Mock incentive ID - in production, this should be fetched from the contract
@@ -67,10 +75,10 @@ export function StakingInterface({ userPositions = [] }: StakingInterfaceProps) 
   const handleStake = async () => {
     if (!address || !selectedTokenId) return;
 
+    setAvailable(false);
     try {
-      setStatus(TransactionStatus.PENDING);
       
-      await writeContract({
+      writeContract({
         address: CONTRACTS.UNISWAP_V3_STAKER as `0x${string}`,
         abi: STAKER_ABI,
         functionName: 'stakeToken',
@@ -81,17 +89,17 @@ export function StakingInterface({ userPositions = [] }: StakingInterfaceProps) 
     } catch (error) {
       console.error('Stake failed:', error);
       toast.error('Failed to stake. Please try again.');
-      setStatus(TransactionStatus.ERROR);
+      setAvailable(true);
     }
   };
 
   const handleUnstake = async () => {
     if (!address || !selectedTokenId) return;
 
+    setAvailable(false);
     try {
-      setStatus(TransactionStatus.PENDING);
       
-      await writeContract({
+      writeContract({
         address: CONTRACTS.UNISWAP_V3_STAKER as `0x${string}`,
         abi: STAKER_ABI,
         functionName: 'unstakeToken',
@@ -102,17 +110,17 @@ export function StakingInterface({ userPositions = [] }: StakingInterfaceProps) 
     } catch (error) {
       console.error('Unstake failed:', error);
       toast.error('Failed to unstake. Please try again.');
-      setStatus(TransactionStatus.ERROR);
+      setAvailable(true);
     }
   };
 
   const handleClaimRewards = async () => {
     if (!address) return;
 
+    setAvailable(false);
     try {
-      setStatus(TransactionStatus.PENDING);
       
-      await writeContract({
+      writeContract({
         address: CONTRACTS.UNISWAP_V3_STAKER as `0x${string}`,
         abi: STAKER_ABI,
         functionName: 'claimReward',
@@ -127,11 +135,9 @@ export function StakingInterface({ userPositions = [] }: StakingInterfaceProps) 
     } catch (error) {
       console.error('Claim failed:', error);
       toast.error('Failed to claim rewards. Please try again.');
-      setStatus(TransactionStatus.ERROR);
+      setAvailable(true);
     }
   };
-
-  const isLoading = status === TransactionStatus.PENDING || isConfirming;
 
   return (
     <div className="space-y-8">
@@ -172,10 +178,10 @@ export function StakingInterface({ userPositions = [] }: StakingInterfaceProps) 
 
         <button
           onClick={handleClaimRewards}
-          disabled={!address || parseFloat(rewards) === 0 || isLoading}
+          disabled={!address || parseFloat(rewards) === 0 || !available}
           className="btn-primary w-full text-lg py-4"
         >
-          {isLoading ? (
+          {!available ? (
             <div className="flex items-center justify-center space-x-2">
               <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full"></div>
               <span>Claiming...</span>
@@ -205,7 +211,17 @@ export function StakingInterface({ userPositions = [] }: StakingInterfaceProps) 
           </div>
         </div>
         
-        {userPositions.length === 0 ? (
+        {isLoadingPositions ? (
+          <div className="text-center py-12">
+            <div className="relative mb-6">
+              <div className="w-20 h-20 bg-gradient-to-br from-slate-100 to-slate-200 rounded-3xl flex items-center justify-center mx-auto">
+                <div className="w-8 h-8 border-2 border-slate-400/30 border-t-slate-600 rounded-full animate-spin"></div>
+              </div>
+            </div>
+            <h4 className="text-lg font-semibold text-slate-900 mb-2">Loading Positions...</h4>
+            <p className="text-slate-600">Fetching your liquidity positions from the blockchain</p>
+          </div>
+        ) : positions.length === 0 ? (
           <div className="text-center py-12">
             <div className="relative mb-6">
               <div className="w-20 h-20 bg-gradient-to-br from-slate-100 to-slate-200 rounded-3xl flex items-center justify-center mx-auto">
@@ -237,45 +253,70 @@ export function StakingInterface({ userPositions = [] }: StakingInterfaceProps) 
                 className="input-field text-center font-semibold"
               >
                 <option value="">Choose a position...</option>
-                {userPositions.map((tokenId) => (
-                  <option key={tokenId} value={tokenId}>
-                    Position #{tokenId} - JOCX/USDT LP
+                {positions.map((position) => (
+                  <option key={position.tokenId} value={position.tokenId}>
+                    Position #{position.tokenId} - JOCX/USDT LP (Fee: {position.fee / 10000}%)
                   </option>
                 ))}
               </select>
             </div>
 
-            {selectedTokenId && (
-              <div className="card-compact bg-slate-50/80 space-y-3">
-                <h5 className="font-semibold text-slate-900">Position Details</h5>
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-slate-600">Token ID:</span>
-                    <span className="font-semibold text-slate-900">#{selectedTokenId}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-600">Status:</span>
-                    <span className="font-semibold text-green-600">Active</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-600">Liquidity:</span>
-                    <span className="font-semibold text-slate-900">$1,250</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-600">Fees Earned:</span>
-                    <span className="font-semibold text-slate-900">$12.50</span>
+            {selectedTokenId && (() => {
+              const selectedPosition = positions.find(p => p.tokenId === selectedTokenId);
+              if (!selectedPosition) return null;
+              
+              const isJocxToken0 = selectedPosition.token0.toLowerCase() === CONTRACTS.JOCX_TOKEN.toLowerCase();
+              const jocxTokensOwed = isJocxToken0 ? selectedPosition.tokensOwed0 : selectedPosition.tokensOwed1;
+              const usdtTokensOwed = isJocxToken0 ? selectedPosition.tokensOwed1 : selectedPosition.tokensOwed0;
+              
+              return (
+                <div className="card-compact bg-slate-50/80 space-y-3">
+                  <h5 className="font-semibold text-slate-900">Position Details</h5>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-slate-600">Token ID:</span>
+                      <span className="font-semibold text-slate-900">#{selectedTokenId}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-600">Status:</span>
+                      <span className="font-semibold text-green-600">
+                        {BigInt(selectedPosition.liquidity) > BigInt(0) ? 'Active' : 'Closed'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-600">Fee Tier:</span>
+                      <span className="font-semibold text-slate-900">{selectedPosition.fee / 10000}%</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-600">Liquidity:</span>
+                      <span className="font-semibold text-slate-900">
+                        {parseFloat(formatUnits(BigInt(selectedPosition.liquidity), 18)).toFixed(6)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-600">JOCX Fees:</span>
+                      <span className="font-semibold text-slate-900">
+                        {parseFloat(formatUnits(BigInt(jocxTokensOwed), 18)).toFixed(6)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-600">USDT Fees:</span>
+                      <span className="font-semibold text-slate-900">
+                        {parseFloat(formatUnits(BigInt(usdtTokensOwed), 6)).toFixed(6)}
+                      </span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <button
                 onClick={handleStake}
-                disabled={!address || !selectedTokenId || isLoading}
+                disabled={!address || !selectedTokenId || !available}
                 className="btn-primary py-4"
               >
-                {isLoading ? (
+                {!available ? (
                   <div className="flex items-center justify-center space-x-2">
                     <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full"></div>
                     <span>Staking...</span>
@@ -292,10 +333,10 @@ export function StakingInterface({ userPositions = [] }: StakingInterfaceProps) 
               
               <button
                 onClick={handleUnstake}
-                disabled={!address || !selectedTokenId || isLoading}
+                disabled={!address || !selectedTokenId || !available}
                 className="btn-secondary py-4"
               >
-                {isLoading ? (
+                {!available ? (
                   <div className="flex items-center justify-center space-x-2">
                     <div className="w-4 h-4 border-2 border-slate-400/30 border-t-slate-600 rounded-full"></div>
                     <span>Unstaking...</span>
